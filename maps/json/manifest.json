@@ -1,0 +1,266 @@
+[
+  {
+    "maze_id": "Portugal-2024-Final",
+    "input_file": "Portugal-2024-Final.txt",
+    "output_file": "Portugal-2024-Final.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "alljapan-015-1994-exp-fin",
+    "input_file": "alljapan-015-1994-exp-fin.txt",
+    "output_file": "alljapan-015-1994-exp-fin.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "alljapan-031-2010-frsh",
+    "input_file": "alljapan-031-2010-frsh.txt",
+    "output_file": "alljapan-031-2010-frsh.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "alljapan-044-2023-exp-fin",
+    "input_file": "alljapan-044-2023-exp-fin.txt",
+    "output_file": "alljapan-044-2023-exp-fin.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "alljapan-045-2024-exp-fin",
+    "input_file": "alljapan-045-2024-exp-fin.txt",
+    "output_file": "alljapan-045-2024-exp-fin.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "apec2024",
+    "input_file": "apec2024.txt",
+    "output_file": "apec2024.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "apec2025",
+    "input_file": "apec2025.txt",
+    "output_file": "apec2025.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  },
+  {
+    "maze_id": "br2024-robochallenge-day1",
+    "input_file": "br2024-robochallenge-day1.txt",
+    "output_file": "br2024-robochallenge-day1.json",
+    "width": 16,
+    "height": 16,
+    "start": [
+      0,
+      15
+    ],
+    "goal": [
+      7,
+      7
+    ],
+    "goal_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        7
+      ],
+      [
+        7,
+        8
+      ],
+      [
+        8,
+        8
+      ]
+    ]
+  }
+]
