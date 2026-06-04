@@ -992,7 +992,7 @@ def render_process_png(map_data: dict[str, Any], algorithm_result: dict[str, Any
 
     algorithm = str(algorithm_result.get("algorithm", ""))
     trace = algorithm_result.get("visualization_trace", [])
-    if algorithm in {"BFS", "DFS", "A*"}:
+    if algorithm in {"BFS", "DFS", "A*", "Weighted A*"}:
         frames = select_static_process_frames(trace, panel_count=PANEL_COUNT)
         visualization_type = "static_process_grid"
         static_mode = True
@@ -1038,7 +1038,7 @@ def render_process_gif(map_data: dict[str, Any], algorithm_result: dict[str, Any
         return {"status": status, "artifact_type": "image/gif", "gif_output_path": None, "visualization_type": "none", "gif_frame_count": 0}
 
     algorithm = str(algorithm_result.get("algorithm", ""))
-    if algorithm in {"BFS", "DFS", "A*"}:
+    if algorithm in {"BFS", "DFS", "A*", "Weighted A*"}:
         frames = _sample_static_gif_frames(algorithm_result.get("visualization_trace", []))
         visualization_type = "static_process_gif"
         static_mode = True

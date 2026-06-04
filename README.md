@@ -57,13 +57,9 @@ opt_final/
 1. 计划书与接口规范整理
 2. Micromouse 地图下载与 JSON 转换
 3. 统一地图读取脚本
-4. `BFS`、`DFS`、`A*`、`LPA*`、`D* Lite` 可运行版本
+4. `BFS`、`DFS`、`A*`、`Weighted A*`、`LPA*`、`D* Lite` 可运行版本
 5. 主流程 `main.py`、算法注册器、动态图构造器
 6. `PNG + GIF` 双产物可视化
-
-当前仍为预留状态：
-
-1. `Weighted A*`
 
 ## 输出路径
 
@@ -108,7 +104,8 @@ python3 'src/main.py' --output-dir 'outputs/demo_run' --visualize-mode image
 9. `dstar_lite_process.png`
 10. `dstar_lite_process.gif`
 
-`Weighted A*` 当前不会生成图像产物。
+11. `weighted_a_star_process.png`
+12. `weighted_a_star_process.gif`
 
 ## 常用命令
 
