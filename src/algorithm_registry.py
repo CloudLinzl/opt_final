@@ -66,6 +66,7 @@ def _placeholder_result(maze_id: str, algorithm: str, status: str) -> dict[str, 
 def default_registry() -> list[AlgorithmRegistration]:
     return [
         AlgorithmRegistration("bfs", "BFS", "src.bfs", "run_bfs", dynamic=False),
+        AlgorithmRegistration("dfs", "DFS", "src.dfs", "run_dfs", dynamic=False),
         AlgorithmRegistration("a_star", "A*", "src.a_star", "run_a_star", dynamic=False),
         AlgorithmRegistration(
             "weighted_a_star",

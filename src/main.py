@@ -38,8 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "outputs",
-        help="Directory for pipeline outputs",
+        default=PROJECT_ROOT / "outputs" / "default-run",
+        help="Directory for one pipeline run",
     )
     parser.add_argument("--variant-index", type=int, default=1, help="Dynamic variant index")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for dynamic map generation")
@@ -74,6 +74,8 @@ def run_pipeline(
 ) -> dict[str, Any]:
     static_map_path = Path(static_map_file)
     out_root = Path(output_dir)
+    if out_root == PROJECT_ROOT / "outputs":
+        out_root = out_root / "default_run"
     out_root.mkdir(parents=True, exist_ok=True)
     run_name = out_root.name
 

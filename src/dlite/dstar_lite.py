@@ -114,6 +114,10 @@ def _trace_frame(
     current_cell: tuple[int, int] | list[int] | None,
     path: list[list[int]] | None,
     blocked_cells: set[tuple[int, int]],
+    replan_count: int = 0,
+    updated_nodes: int = 0,
+    affected_cells: list[list[int]] | None = None,
+    queue_size: int = 0,
 ) -> dict[str, Any]:
     return {
         "step": step,
@@ -123,6 +127,10 @@ def _trace_frame(
         "explored_cells": [],
         "frontier_cells": [],
         "blocked_cells": [[x, y] for x, y in sorted(blocked_cells)],
+        "replan_count": replan_count,
+        "updated_nodes": updated_nodes,
+        "affected_cells": [list(cell) for cell in (affected_cells or [])],
+        "queue_size": queue_size,
     }
 
 
@@ -405,7 +413,7 @@ class DStarLite:
 
         return []
 
-    def apply_dynamic_update(self, update: dict[str, Any]) -> int:
+    def apply_dynamic_update(self, update: dict[str, Any]) -> tuple[int, list[list[int]]]:
         affected: set[tuple[int, int]] = set()
         blocked_added: list[list[int]] = []
         released_removed: list[list[int]] = []
@@ -439,8 +447,8 @@ class DStarLite:
             released_cells=released_removed,
             affected_count=len(affected),
         )
-
-        return len(update.get("blocked_cells", [])) + len(update.get("released_cells", []))
+        affected_cells = [[x, y] for x, y in sorted(affected)]
+        return len(update.get("blocked_cells", [])) + len(update.get("released_cells", [])), affected_cells
 
 
 def run_dstar_lite(
@@ -473,6 +481,9 @@ def run_dstar_lite(
             current_cell=planner.current_start,
             path=initial_plan,
             blocked_cells=planner.blocked_cells,
+            replan_count=0,
+            updated_nodes=0,
+            queue_size=len(planner.open_keys),
         )
     ]
 
@@ -524,11 +535,28 @@ def run_dstar_lite(
                     current_cell=planner.current_start,
                     path=pre_update_path,
                     blocked_cells=planner.blocked_cells,
+                    replan_count=replan_count,
+                    updated_nodes=updated_nodes,
+                    queue_size=len(planner.open_keys),
                 )
             )
             for update in updates_by_step[step_count]:
                 replan_start = time.perf_counter()
-                updated_nodes += planner.apply_dynamic_update(update)
+                changed_nodes, affected_cells = planner.apply_dynamic_update(update)
+                updated_nodes += changed_nodes
+                visualization_trace.append(
+                    _trace_frame(
+                        step=step_count,
+                        event="dynamic_update",
+                        current_cell=planner.current_start,
+                        path=pre_update_path,
+                        blocked_cells=planner.blocked_cells,
+                        replan_count=replan_count,
+                        updated_nodes=updated_nodes,
+                        affected_cells=affected_cells,
+                        queue_size=len(planner.open_keys),
+                    )
+                )
                 planner.compute_shortest_path()
                 replan_times.append((time.perf_counter() - replan_start) * 1000.0)
                 replan_count += 1
@@ -548,6 +576,10 @@ def run_dstar_lite(
                         current_cell=planner.current_start,
                         path=replanned_path,
                         blocked_cells=planner.blocked_cells,
+                        replan_count=replan_count,
+                        updated_nodes=updated_nodes,
+                        affected_cells=affected_cells,
+                        queue_size=len(planner.open_keys),
                     )
                 )
                 if not replanned_path:
@@ -577,6 +609,9 @@ def run_dstar_lite(
             current_cell=planner.current_start,
             path=actual_path if success else [],
             blocked_cells=planner.blocked_cells,
+            replan_count=replan_count,
+            updated_nodes=updated_nodes,
+            queue_size=len(planner.open_keys),
         )
     )
 

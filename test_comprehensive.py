@@ -89,7 +89,7 @@ def main():
         print()
 
     # Save results
-    output_path = Path("outputs") / "step1_step2_results.json"
+    output_path = Path("outputs") / "tests" / "step1_step2_results.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
