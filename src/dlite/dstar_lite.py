@@ -89,6 +89,7 @@ def _default_result(maze_id: str, expanded_nodes: int = 0, runtime_ms: float = 0
     return {
         "maze_id": maze_id,
         "algorithm": "D* Lite",
+        "status": "ok",
         "success": False,
         "path": [],
         "path_length": -1,
@@ -102,6 +103,26 @@ def _default_result(maze_id: str, expanded_nodes: int = 0, runtime_ms: float = 0
         "replan_time_ms": 0.0,
         "updated_nodes": 0,
         "replanned_path_length": -1,
+        "visualization_trace": [],
+    }
+
+
+def _trace_frame(
+    *,
+    step: int,
+    event: str,
+    current_cell: tuple[int, int] | list[int] | None,
+    path: list[list[int]] | None,
+    blocked_cells: set[tuple[int, int]],
+) -> dict[str, Any]:
+    return {
+        "step": step,
+        "event": event,
+        "current_cell": list(current_cell) if current_cell is not None else None,
+        "path": [list(cell) for cell in (path or [])],
+        "explored_cells": [],
+        "frontier_cells": [],
+        "blocked_cells": [[x, y] for x, y in sorted(blocked_cells)],
     }
 
 
@@ -255,7 +276,26 @@ class DStarLite:
         ]
 
     def predecessors(self, state: tuple[int, int]) -> list[tuple[int, int]]:
-        return self.successors(state)
+        x, y = state
+        candidates = [
+            (x, y - 1),
+            (x + 1, y),
+            (x, y + 1),
+            (x - 1, y),
+        ]
+        predecessors: list[tuple[int, int]] = []
+        for pred in candidates:
+            px, py = pred
+            if not (0 <= px < self.map_data["width"] and 0 <= py < self.map_data["height"]):
+                continue
+            if self.is_blocked(pred):
+                continue
+            if state in {
+                _normalize_state(cell)
+                for cell in get_neighbors(self.map_data, px, py)
+            }:
+                predecessors.append(pred)
+        return predecessors
 
     def cost(self, a: tuple[int, int], b: tuple[int, int]) -> float:
         if self.is_blocked(a) or self.is_blocked(b):
@@ -372,9 +412,10 @@ class DStarLite:
 
         for cell in update.get("blocked_cells", []):
             state = _normalize_state(cell)
+            neighbor_states = self.predecessors(state)
             self.blocked_cells.add(state)
             affected.add(state)
-            affected.update(self.predecessors(state))
+            affected.update(neighbor_states)
             blocked_added.append([state[0], state[1]])
 
         for cell in update.get("released_cells", []):
@@ -425,10 +466,20 @@ def run_dstar_lite(
     runtime_start = time.perf_counter()
     planner.compute_shortest_path()
     initial_plan = planner.extract_planned_path()
+    visualization_trace = [
+        _trace_frame(
+            step=0,
+            event="initial_plan",
+            current_cell=planner.current_start,
+            path=initial_plan,
+            blocked_cells=planner.blocked_cells,
+        )
+    ]
 
     if not initial_plan:
         runtime_ms = (time.perf_counter() - runtime_start) * 1000.0
         result = _default_result(map_data["maze_id"], expanded_nodes=planner.expanded_nodes, runtime_ms=runtime_ms)
+        result["visualization_trace"] = visualization_trace
         if include_debug_log:
             result["debug_log"] = planner.debug_log
             result["debug_snapshot"] = planner.snapshot()
@@ -465,6 +516,16 @@ def run_dstar_lite(
         planner._log("move", step=step_count, moved_to=[next_state[0], next_state[1]])
 
         if step_count in updates_by_step:
+            pre_update_path = planner.extract_planned_path()
+            visualization_trace.append(
+                _trace_frame(
+                    step=step_count,
+                    event="before_update",
+                    current_cell=planner.current_start,
+                    path=pre_update_path,
+                    blocked_cells=planner.blocked_cells,
+                )
+            )
             for update in updates_by_step[step_count]:
                 replan_start = time.perf_counter()
                 updated_nodes += planner.apply_dynamic_update(update)
@@ -479,6 +540,15 @@ def run_dstar_lite(
                     step=step_count,
                     replanned_path_length=replanned_path_length,
                     snapshot=planner.snapshot(replanned_path),
+                )
+                visualization_trace.append(
+                    _trace_frame(
+                        step=step_count,
+                        event="replan",
+                        current_cell=planner.current_start,
+                        path=replanned_path,
+                        blocked_cells=planner.blocked_cells,
+                    )
                 )
                 if not replanned_path:
                     success = False
@@ -500,10 +570,20 @@ def run_dstar_lite(
         else -1
     )
     replan_time_ms = sum(replan_times) / len(replan_times) if replan_times else 0.0
+    visualization_trace.append(
+        _trace_frame(
+            step=step_count,
+            event="final_result",
+            current_cell=planner.current_start,
+            path=actual_path if success else [],
+            blocked_cells=planner.blocked_cells,
+        )
+    )
 
     result = {
         "maze_id": map_data["maze_id"],
         "algorithm": "D* Lite",
+        "status": "ok",
         "success": success,
         "path": actual_path if success else [],
         "path_length": path_length,
@@ -517,6 +597,7 @@ def run_dstar_lite(
         "replan_time_ms": replan_time_ms,
         "updated_nodes": updated_nodes,
         "replanned_path_length": replanned_path_length if replan_count > 0 else 0,
+        "visualization_trace": visualization_trace,
     }
     if include_debug_log:
         result["debug_log"] = planner.debug_log

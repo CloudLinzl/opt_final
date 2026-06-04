@@ -75,11 +75,12 @@ def run_pipeline(
     static_map_path = Path(static_map_file)
     out_root = Path(output_dir)
     out_root.mkdir(parents=True, exist_ok=True)
+    run_name = out_root.name
 
     static_map_data = load_map(static_map_path)
     dynamic_dir = out_root / "dynamic_maps"
     results_dir = out_root / "results"
-    visuals_dir = out_root / "visualizations"
+    visuals_dir = PROJECT_ROOT / "outputs" / "visualizations" / run_name
 
     dynamic_bundle = create_dynamic_map_variant(
         static_map_data,
@@ -122,7 +123,12 @@ def run_pipeline(
             }
         else:
             suffix = "txt" if visualize_mode == "text" else "png"
-            artifact_path = visuals_dir / f"{registration.key}.{suffix}"
+            artifact_name = (
+                f"{registration.key}_process.{suffix}"
+                if visualize_mode == "image"
+                else f"{registration.key}.{suffix}"
+            )
+            artifact_path = visuals_dir / artifact_name
             visualization_artifacts[registration.key] = visualize_result(
                 visualization_map,
                 result,
