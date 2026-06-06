@@ -37,12 +37,21 @@ GOAL_FILL = (254, 226, 226)
 START_FILL = (220, 252, 231)
 LEGEND_BORDER = (120, 120, 120)
 METRIC_BOX = (248, 250, 252)
+DYNAMIC_PANEL_FILL = (252, 253, 255)
+DYNAMIC_STRIP_FILL = (248, 250, 252)
+DYNAMIC_TEXT_MUTED = (71, 85, 105)
+DYNAMIC_RISK_FILL = (255, 237, 213)
+DYNAMIC_NARROW_FILL = (224, 242, 254)
+DYNAMIC_REPAIR_FILL = (219, 234, 254)
+DYNAMIC_FRONTIER_FILL = (254, 215, 170)
 
 GIF_EXPLORED_FILL = (254, 240, 138)
 GIF_FRONTIER_FILL = (253, 186, 116)
 GIF_BLOCKED_FILL = (148, 163, 184)
 GIF_LPA_AFFECTED_FILL = (165, 243, 252)
 GIF_DSTAR_AFFECTED_FILL = (221, 214, 254)
+GIF_RISK_FILL = (255, 237, 213)
+GIF_NARROW_FILL = (224, 242, 254)
 
 IMAGE_DPI = 300
 PNG_WIDTH = 1800
@@ -73,6 +82,7 @@ GIF_LABEL_SCALE = 2
 STATIC_GIF_FRAME_MS = 1000
 DYNAMIC_GIF_FRAME_MS = 1000
 DYNAMIC_EVENT_FRAME_MS = 1000
+DYNAMIC_MOVE_FRAME_MS = 420
 FINAL_HOLD_MS = 1000
 
 
@@ -492,6 +502,38 @@ def draw_gif_blocked_cells(canvas: RasterCanvas, layout: dict[str, int], blocked
     _fill_cells(canvas, layout, blocked_cells, GIF_BLOCKED_FILL, alpha=1.0, inset_ratio=7)
 
 
+def draw_cost_regions(canvas: RasterCanvas, map_data: dict[str, Any], layout: dict[str, int], *, gif_mode: bool = False) -> None:
+    risk_color = GIF_RISK_FILL if gif_mode else DYNAMIC_RISK_FILL
+    narrow_color = GIF_NARROW_FILL if gif_mode else DYNAMIC_NARROW_FILL
+    _fill_cells(canvas, layout, map_data.get("risk_cells", []), risk_color, alpha=0.62 if gif_mode else 0.34, inset_ratio=16)
+    _fill_cells(canvas, layout, map_data.get("narrow_cells", []), narrow_color, alpha=0.70 if gif_mode else 0.38, inset_ratio=13)
+
+
+def draw_dynamic_maze(canvas: RasterCanvas, map_data: dict[str, Any], layout: dict[str, int], *, gif_mode: bool = False) -> None:
+    draw_cost_regions(canvas, map_data, layout, gif_mode=gif_mode)
+    draw_static_maze(canvas, map_data, layout)
+
+
+def draw_dynamic_search_layers(
+    canvas: RasterCanvas,
+    layout: dict[str, int],
+    frame: dict[str, Any],
+    *,
+    algorithm: str,
+    gif_mode: bool = False,
+) -> None:
+    if algorithm != "LPA*":
+        return
+    explored = frame.get("explored_cells", [])
+    frontier = frame.get("frontier_cells", [])
+    if gif_mode:
+        draw_gif_explored_nodes(canvas, layout, explored)
+        draw_gif_frontier_cells(canvas, layout, frontier)
+    else:
+        _fill_cells(canvas, layout, explored, DYNAMIC_REPAIR_FILL, alpha=0.36, inset_ratio=12)
+        _fill_cells(canvas, layout, frontier, DYNAMIC_FRONTIER_FILL, alpha=0.32, inset_ratio=9)
+
+
 def draw_path(canvas: RasterCanvas, layout: dict[str, int], path: list[list[int]]) -> None:
     if len(path) < 2:
         return
@@ -499,6 +541,39 @@ def draw_path(canvas: RasterCanvas, layout: dict[str, int], path: list[list[int]
     centers = [_cell_center(layout, int(cell[0]), int(cell[1])) for cell in path]
     for (x0, y0), (x1, y1) in zip(centers, centers[1:]):
         canvas.draw_line(x0, y0, x1, y1, PATH_BLUE, thickness=thickness)
+
+
+def draw_path_with_style(
+    canvas: RasterCanvas,
+    layout: dict[str, int],
+    path: list[list[int]],
+    *,
+    color: tuple[int, int, int],
+    thickness: int | None = None,
+    dashed: bool = False,
+) -> None:
+    if len(path) < 2:
+        return
+    line_thickness = thickness or max(3, layout["cell_size"] // 8)
+    centers = [_cell_center(layout, int(cell[0]), int(cell[1])) for cell in path]
+    for (x0, y0), (x1, y1) in zip(centers, centers[1:]):
+        if not dashed:
+            canvas.draw_line(x0, y0, x1, y1, color, thickness=line_thickness)
+            continue
+        dx = x1 - x0
+        dy = y1 - y0
+        steps = max(abs(dx), abs(dy), 1)
+        dash = max(8, layout["cell_size"] // 3)
+        gap = max(5, layout["cell_size"] // 5)
+        drawn = 0
+        while drawn < steps:
+            end = min(steps, drawn + dash)
+            sx = x0 + round(dx * drawn / steps)
+            sy = y0 + round(dy * drawn / steps)
+            ex = x0 + round(dx * end / steps)
+            ey = y0 + round(dy * end / steps)
+            canvas.draw_line(sx, sy, ex, ey, color, thickness=line_thickness)
+            drawn = end + gap
 
 
 def draw_start_goal(canvas: RasterCanvas, map_data: dict[str, Any], layout: dict[str, int]) -> None:
@@ -607,13 +682,15 @@ def draw_process_legend(
         items = [
             ("START", START_GREEN, "circle"),
             ("GOAL", GOAL_RED, "outline"),
-            ("BLOCKED", BLOCKED_GRAY if height > 1000 else GIF_BLOCKED_FILL, "fill"),
-            ("AFFECTED", affected_color, "fill"),
-            ("CURRENT", CURRENT_ORANGE, "circle"),
+            ("RISK", DYNAMIC_RISK_FILL if height > 1000 else GIF_RISK_FILL, "fill"),
+            ("NARROW", DYNAMIC_NARROW_FILL if height > 1000 else GIF_NARROW_FILL, "fill"),
+            ("BLOCK", BLOCKED_GRAY if height > 1000 else GIF_BLOCKED_FILL, "fill"),
+            ("AFFECT", affected_color, "fill"),
+            ("REPAIR", DYNAMIC_REPAIR_FILL if height > 1000 else GIF_EXPLORED_FILL, "fill"),
             ("PATH", PATH_BLUE, "line"),
         ]
 
-    spacing = 185 if height > 1000 else 145
+    spacing = 185 if height > 1000 and visualization_type == "static_process_grid" else 132 if height > 1000 else 108
     for label, color, kind in items:
         if kind == "circle":
             canvas.draw_circle(x + box_size // 2, legend_y + box_size // 2, box_size // 2, color, outline=BLACK, outline_width=2)
@@ -643,6 +720,258 @@ def draw_metric_box(canvas: RasterCanvas, lines: list[str], *, width: int) -> No
     canvas.draw_rect_outline(x0, y0, x1, y1, LEGEND_BORDER, thickness=2)
     for index, line in enumerate(lines):
         draw_text(canvas, x0 + 10, y0 + 8 + index * line_height, line, BLACK, scale=scale)
+
+
+def _frame_phase_label(frame: dict[str, Any]) -> str:
+    event = str(frame.get("event", "")).replace("_", " ").upper()
+    if event == "INITIAL PLAN":
+        return "INITIAL PLAN"
+    if event == "BEFORE UPDATE":
+        return "MOVE BEFORE UPDATE"
+    if event == "DYNAMIC UPDATE":
+        return "MAP CHANGE"
+    if event == "REPLAN":
+        return "LOCAL REPAIR"
+    if event == "FINAL RESULT":
+        return "FINAL RESULT"
+    return event or "PROCESS"
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _panel_metric_lines(frame: dict[str, Any], algorithm_result: dict[str, Any], algorithm: str) -> list[str]:
+    affected_count = len(frame.get("affected_cells", []))
+    queue_size = _safe_int(frame.get("queue_size", 0))
+    lines = [f"STEP {_safe_int(frame.get('step', 0))}  REP {_safe_int(frame.get('replan_count', 0))}  AFF {affected_count}  Q {queue_size}"]
+    if algorithm == "LPA*":
+        lines.append(
+            f"LEN {_safe_int(algorithm_result.get('path_length', 0))}  "
+            f"TURN {_safe_int(algorithm_result.get('turn_count', 0))}  "
+            f"COST {_safe_float(algorithm_result.get('total_cost', 0.0)):.0f}"
+        )
+    else:
+        lines.append(f"UPDATED {_safe_int(frame.get('updated_nodes', 0))}")
+    return lines
+
+
+def draw_panel_metric_strip(
+    canvas: RasterCanvas,
+    bounds: dict[str, int],
+    frame: dict[str, Any],
+    algorithm_result: dict[str, Any],
+    algorithm: str,
+) -> None:
+    lines = _panel_metric_lines(frame, algorithm_result, algorithm)
+    y1 = bounds["top"] + bounds["height"] - PANEL_INSET
+    y0 = y1 - 42
+    x0 = bounds["left"] + PANEL_INSET
+    x1 = bounds["left"] + bounds["width"] - PANEL_INSET
+    canvas.fill_rect(x0, y0, x1, y1, DYNAMIC_STRIP_FILL)
+    canvas.draw_rect_outline(x0, y0, x1, y1, PANEL_BORDER, thickness=1)
+
+    for index, line in enumerate(lines[:2]):
+        text = _truncate_text(line, x1 - x0 - 16, SMALL_SCALE)
+        draw_text(canvas, x0 + 8, y0 + 7 + index * 17, text, DYNAMIC_TEXT_MUTED, scale=SMALL_SCALE)
+
+
+def _gif_metric_lines(frame: dict[str, Any], algorithm_result: dict[str, Any], algorithm: str) -> list[str]:
+    cost = _safe_float(algorithm_result.get("total_cost", 0.0))
+    lines = [
+        f"STEP {_safe_int(frame.get('step', 0))}",
+        f"UPDATED {_safe_int(frame.get('updated_nodes', 0))}",
+        f"QUEUE {_safe_int(frame.get('queue_size', 0))}",
+        f"REPLAN {_safe_int(frame.get('replan_count', 0))}",
+    ]
+    if algorithm == "LPA*":
+        lines.append(f"COST {cost:.0f}")
+    else:
+        current_cell = frame.get("current_cell")
+        pos_text = "--,--" if current_cell is None else f"{int(current_cell[0])},{int(current_cell[1])}"
+        lines.append(f"POS {pos_text}")
+    return lines
+
+
+def _first_trace_frame(trace: list[dict[str, Any]], event: str, fallback: dict[str, Any]) -> dict[str, Any]:
+    return next((frame for frame in trace if frame.get("event") == event), fallback)
+
+
+def _last_trace_frame(trace: list[dict[str, Any]], event: str, fallback: dict[str, Any]) -> dict[str, Any]:
+    return next((frame for frame in reversed(trace) if frame.get("event") == event), fallback)
+
+
+def _collect_cells_from_frames(frames: list[dict[str, Any]], key: str) -> list[list[int]]:
+    cells: list[list[int]] = []
+    for frame in frames:
+        cells.extend(frame.get(key, []))
+    normalized = {(int(cell[0]), int(cell[1])) for cell in cells}
+    return [[x, y] for x, y in sorted(normalized, key=lambda item: (item[1], item[0]))]
+
+
+def _lpa_story_bundle(algorithm_result: dict[str, Any]) -> dict[str, Any]:
+    trace = [_clone_frame(frame) for frame in algorithm_result.get("visualization_trace", [])]
+    if not trace:
+        empty = {"step": 0, "event": "empty", "current_cell": None, "path": [], "explored_cells": [], "frontier_cells": [], "blocked_cells": [], "affected_cells": [], "queue_size": 0}
+        trace = [empty]
+
+    initial = _first_trace_frame(trace, "initial_plan", trace[0])
+    before_update = _first_trace_frame(trace, "before_update", initial)
+    map_change = _first_trace_frame(trace, "dynamic_update", before_update)
+    repair = _first_trace_frame(trace, "replan", map_change)
+    repaired = _last_trace_frame(trace, "replan", repair)
+    final = _last_trace_frame(trace, "final_result", trace[-1])
+    repair_frames = [frame for frame in trace if frame.get("event") == "replan"]
+    update_frames = [frame for frame in trace if frame.get("event") == "dynamic_update"]
+
+    return {
+        "trace": trace,
+        "initial": initial,
+        "before_update": before_update,
+        "map_change": map_change,
+        "repair": repair,
+        "repaired": repaired,
+        "final": final,
+        "initial_path": initial.get("path", []),
+        "final_path": algorithm_result.get("path") or final.get("path", []),
+        "affected_cells": _collect_cells_from_frames(update_frames + repair_frames, "affected_cells"),
+        "repair_cells": _collect_cells_from_frames(repair_frames + [final], "explored_cells"),
+        "frontier_cells": _collect_cells_from_frames(repair_frames, "frontier_cells"),
+        "blocked_cells": final.get("blocked_cells", map_change.get("blocked_cells", [])),
+    }
+
+
+def _draw_story_label(canvas: RasterCanvas, x: int, y: int, label: str, value: str, *, width: int) -> None:
+    canvas.fill_rect(x, y, x + width, y + 52, DYNAMIC_STRIP_FILL)
+    canvas.draw_rect_outline(x, y, x + width, y + 52, PANEL_BORDER, thickness=1)
+    draw_text(canvas, x + 12, y + 8, _truncate_text(label, width - 24, SMALL_SCALE), DYNAMIC_TEXT_MUTED, scale=SMALL_SCALE)
+    draw_text(canvas, x + 12, y + 28, _truncate_text(value, width - 24, SMALL_SCALE), BLACK, scale=SMALL_SCALE)
+
+
+def _draw_story_timeline(canvas: RasterCanvas, bundle: dict[str, Any], x: int, y: int, width: int, height: int) -> None:
+    canvas.fill_rect(x, y, x + width, y + height, DYNAMIC_PANEL_FILL)
+    canvas.draw_rect_outline(x, y, x + width, y + height, PANEL_BORDER, thickness=2)
+    draw_text(canvas, x + 22, y + 24, "LPA STAR STORY", BLACK, scale=SMALL_SCALE)
+
+    steps = [
+        ("INITIAL PLAN", bundle["initial"], "BASELINE PATH"),
+        ("MOVE", bundle["before_update"], "FOLLOW CURRENT PLAN"),
+        ("MAP CHANGE", bundle["map_change"], "LOCAL OBSTACLE UPDATE"),
+        ("LOCAL REPAIR", bundle["repair"], "REUSE G RHS VALUES"),
+        ("FINAL RESULT", bundle["final"], "EXECUTED PATH"),
+    ]
+    line_x = x + 42
+    top = y + 88
+    gap = max(84, (height - 170) // max(1, len(steps) - 1))
+    canvas.draw_line(line_x, top, line_x, top + gap * (len(steps) - 1), PANEL_BORDER, thickness=3)
+
+    for index, (title, frame, note) in enumerate(steps):
+        node_y = top + index * gap
+        color = PATH_BLUE if index in {0, 4} else LPA_AFFECTED_CYAN if title == "MAP CHANGE" else CURRENT_ORANGE if title == "LOCAL REPAIR" else DYNAMIC_TEXT_MUTED
+        canvas.draw_circle(line_x, node_y, 13, color, outline=BLACK, outline_width=2)
+        text_x = line_x + 34
+        draw_text(canvas, text_x, node_y - 20, title, BLACK, scale=SMALL_SCALE)
+        draw_text(canvas, text_x, node_y + 2, note, DYNAMIC_TEXT_MUTED, scale=SMALL_SCALE)
+        stats = f"STEP {_safe_int(frame.get('step', 0))}  REP {_safe_int(frame.get('replan_count', 0))}  Q {_safe_int(frame.get('queue_size', 0))}"
+        draw_text(canvas, text_x, node_y + 24, _truncate_text(stats, width - 88, SMALL_SCALE), DYNAMIC_TEXT_MUTED, scale=SMALL_SCALE)
+
+
+def _draw_story_metric_bars(canvas: RasterCanvas, algorithm_result: dict[str, Any], x: int, y: int, width: int, height: int) -> None:
+    canvas.fill_rect(x, y, x + width, y + height, DYNAMIC_PANEL_FILL)
+    canvas.draw_rect_outline(x, y, x + width, y + height, PANEL_BORDER, thickness=2)
+    draw_text(canvas, x + 22, y + 20, "OBJECTIVE SUMMARY", BLACK, scale=SMALL_SCALE)
+
+    metrics = [
+        ("LENGTH", _safe_float(algorithm_result.get("path_length", 0))),
+        ("TURNS", _safe_float(algorithm_result.get("turn_count", 0))),
+        ("RISK", _safe_float(algorithm_result.get("risk_cost", 0))),
+        ("NARROW", _safe_float(algorithm_result.get("narrow_cost", 0))),
+        ("REPLAN", _safe_float(algorithm_result.get("replan_count", 0))),
+        ("UPDATED", _safe_float(algorithm_result.get("updated_nodes", 0))),
+        ("COST", _safe_float(algorithm_result.get("total_cost", 0))),
+    ]
+    max_value = max([value for _, value in metrics] + [1.0])
+    bar_x = x + 170
+    bar_width = width - 260
+    row_y = y + 70
+    row_gap = 26
+    for label, value in metrics:
+        draw_text(canvas, x + 22, row_y, label, DYNAMIC_TEXT_MUTED, scale=SMALL_SCALE)
+        fill_w = max(4, round(bar_width * value / max_value))
+        canvas.fill_rect(bar_x, row_y + 2, bar_x + bar_width, row_y + 14, DYNAMIC_STRIP_FILL)
+        canvas.fill_rect(bar_x, row_y + 2, bar_x + fill_w, row_y + 14, PATH_BLUE if label == "COST" else LPA_AFFECTED_CYAN)
+        canvas.draw_rect_outline(bar_x, row_y + 2, bar_x + bar_width, row_y + 14, PANEL_BORDER, thickness=1)
+        draw_text(canvas, bar_x + bar_width + 12, row_y, f"{value:.0f}", BLACK, scale=SMALL_SCALE)
+        row_y += row_gap
+
+
+def _draw_lpa_story_legend(canvas: RasterCanvas, x: int, y: int, *, compact: bool = False) -> None:
+    items = [
+        ("INITIAL", (147, 197, 253), "line"),
+        ("FINAL", PATH_BLUE, "line"),
+        ("RISK", DYNAMIC_RISK_FILL, "fill"),
+        ("NARROW", DYNAMIC_NARROW_FILL, "fill"),
+        ("BLOCK", BLOCKED_GRAY, "fill"),
+        ("AFFECT", LPA_AFFECTED_CYAN, "fill"),
+        ("REPAIR", DYNAMIC_REPAIR_FILL, "fill"),
+    ]
+    cursor = x
+    spacing = 126 if compact else 168
+    for label, color, kind in items:
+        if kind == "line":
+            canvas.draw_line(cursor, y + 12, cursor + 28, y + 12, color, thickness=6)
+        else:
+            canvas.fill_rect(cursor, y, cursor + 24, y + 24, color, alpha=0.8)
+            canvas.draw_rect_outline(cursor, y, cursor + 24, y + 24, LEGEND_BORDER, thickness=1)
+        draw_text(canvas, cursor + 34, y + 4, label, BLACK, scale=SMALL_SCALE)
+        cursor += spacing
+
+
+def render_lpa_story_png(map_data: dict[str, Any], algorithm_result: dict[str, Any], output_path: str | Path) -> dict[str, Any]:
+    bundle = _lpa_story_bundle(algorithm_result)
+    canvas = RasterCanvas(PNG_WIDTH, PNG_HEIGHT, background=WHITE)
+    draw_header(canvas, algorithm_result, map_data, width=PNG_WIDTH, side_margin=SIDE_MARGIN, scale=TITLE_SCALE, suffix="STORY")
+
+    map_bounds = {"left": 92, "top": 155, "width": 1060, "height": 1050}
+    canvas.fill_rect(map_bounds["left"], map_bounds["top"], map_bounds["left"] + map_bounds["width"], map_bounds["top"] + map_bounds["height"], DYNAMIC_PANEL_FILL)
+    canvas.draw_rect_outline(map_bounds["left"], map_bounds["top"], map_bounds["left"] + map_bounds["width"], map_bounds["top"] + map_bounds["height"], PANEL_BORDER, thickness=2)
+    draw_text(canvas, map_bounds["left"] + 24, map_bounds["top"] + 22, "INITIAL VS FINAL PATH", BLACK, scale=SMALL_SCALE)
+    layout = _layout_in_bounds(map_data, map_bounds["left"] + 38, map_bounds["top"] + 72, map_bounds["width"] - 76, map_bounds["height"] - 112)
+
+    draw_dynamic_maze(canvas, map_data, layout)
+    _fill_cells(canvas, layout, bundle["repair_cells"], DYNAMIC_REPAIR_FILL, alpha=0.34, inset_ratio=14)
+    _fill_cells(canvas, layout, bundle["frontier_cells"], DYNAMIC_FRONTIER_FILL, alpha=0.25, inset_ratio=10)
+    draw_blocked_cells(canvas, layout, bundle["blocked_cells"])
+    draw_affected_cells(canvas, layout, bundle["affected_cells"], LPA_AFFECTED_CYAN, alpha=0.42)
+    draw_path_with_style(canvas, layout, bundle["initial_path"], color=(147, 197, 253), thickness=max(3, layout["cell_size"] // 10), dashed=True)
+    draw_path_with_style(canvas, layout, bundle["final_path"], color=PATH_BLUE, thickness=max(4, layout["cell_size"] // 7))
+    draw_start_goal(canvas, map_data, layout)
+    draw_current_cell(canvas, layout, bundle["final"].get("current_cell"))
+
+    _draw_story_timeline(canvas, bundle, 1195, 155, 510, 1050)
+    _draw_story_metric_bars(canvas, algorithm_result, 92, 1255, 1613, 285)
+    _draw_lpa_story_legend(canvas, 110, 1615)
+    export_png(canvas, output_path, dpi=IMAGE_DPI)
+    return {
+        "status": "ok",
+        "artifact_type": "image/png",
+        "png_output_path": str(output_path),
+        "width_px": PNG_WIDTH,
+        "height_px": PNG_HEIGHT,
+        "dpi": IMAGE_DPI,
+        "visualization_type": "lpa_story_png",
+        "panel_count": 1,
+    }
 
 
 def _clone_frame(frame: dict[str, Any]) -> dict[str, Any]:
@@ -700,22 +1029,26 @@ def select_static_process_frames(trace: list[dict[str, Any]], panel_count: int =
 
 def select_dynamic_process_frames(trace: list[dict[str, Any]], panel_count: int = PANEL_COUNT) -> list[dict[str, Any]]:
     del panel_count
-    titles = ["INITIAL PLAN", "BEFORE UPDATE", "REPLAN 1", "REPLAN 2", "REPLAN 3", "FINAL RESULT"]
+    titles = ["INITIAL PLAN", "MOVE BEFORE UPDATE", "MAP CHANGE", "LOCAL REPAIR", "REPAIRED PLAN", "FINAL RESULT"]
     if not trace:
         trace = [{"step": 0, "event": "empty", "current_cell": None, "path": [], "explored_cells": [], "frontier_cells": [], "blocked_cells": []}]
 
     initial = next((frame for frame in trace if frame.get("event") == "initial_plan"), trace[0])
     before_update = next((frame for frame in trace if frame.get("event") == "before_update"), initial)
+    dynamic_update = next((frame for frame in trace if frame.get("event") == "dynamic_update"), before_update)
     replans = [frame for frame in trace if frame.get("event") == "replan"]
     final = next((frame for frame in reversed(trace) if frame.get("event") == "final_result"), trace[-1])
 
-    selected = [_clone_frame(initial), _clone_frame(before_update)]
-    last_available = selected[-1]
-    for index in range(3):
-        if index < len(replans):
-            last_available = _clone_frame(replans[index])
-        selected.append(_clone_frame(last_available))
-    selected.append(_clone_frame(final))
+    local_repair = _clone_frame(replans[0]) if replans else _clone_frame(dynamic_update)
+    repaired_plan = _clone_frame(replans[-1]) if replans else _clone_frame(local_repair)
+    selected = [
+        _clone_frame(initial),
+        _clone_frame(before_update),
+        _clone_frame(dynamic_update),
+        local_repair,
+        repaired_plan,
+        _clone_frame(final),
+    ]
     for index, frame in enumerate(selected):
         frame["panel_title"] = titles[index]
     return selected
@@ -723,38 +1056,32 @@ def select_dynamic_process_frames(trace: list[dict[str, Any]], panel_count: int 
 
 def select_lpa_process_frames(trace: list[dict[str, Any]], panel_count: int = PANEL_COUNT) -> list[dict[str, Any]]:
     del panel_count
-    titles = ["INITIAL PLAN", "UPDATE 1", "REPAIR 1", "UPDATE 2", "REPAIR 2", "FINAL RESULT"]
+    titles = ["INITIAL PLAN", "MOVE BEFORE UPDATE", "MAP CHANGE", "LOCAL REPAIR", "REPAIRED PLAN", "FINAL RESULT"]
     if not trace:
         trace = [{"step": 0, "event": "empty", "current_cell": None, "path": [], "explored_cells": [], "frontier_cells": [], "blocked_cells": [], "affected_cells": [], "queue_size": 0}]
 
     initial = next((frame for frame in trace if frame.get("event") == "initial_plan"), trace[0])
+    before_updates = [frame for frame in trace if frame.get("event") == "before_update"]
     updates = [frame for frame in trace if frame.get("event") == "dynamic_update"]
     replans = [frame for frame in trace if frame.get("event") == "replan"]
     final = next((frame for frame in reversed(trace) if frame.get("event") == "final_result"), trace[-1])
 
-    selected = [_clone_frame(initial)]
-    last_frame = _clone_frame(initial)
-    sequence: list[dict[str, Any]] = []
-    for index in range(2):
-        if index < len(updates):
-            sequence.append(_clone_frame(updates[index]))
-        elif sequence:
-            sequence.append(_clone_frame(sequence[-1]))
-        else:
-            sequence.append(_clone_frame(last_frame))
-        if index < len(replans):
-            sequence.append(_clone_frame(replans[index]))
-            last_frame = _clone_frame(replans[index])
-        else:
-            sequence.append(_clone_frame(last_frame))
-    selected.extend(sequence[:4])
-    selected.append(_clone_frame(final))
+    before_update = _clone_frame(before_updates[0]) if before_updates else _clone_frame(initial)
+    map_change = _clone_frame(updates[0]) if updates else _clone_frame(before_update)
+    local_repair = _clone_frame(replans[0]) if replans else _clone_frame(map_change)
+    repaired_plan = _clone_frame(replans[-1]) if replans else _clone_frame(local_repair)
+    selected = [
+        _clone_frame(initial),
+        before_update,
+        map_change,
+        local_repair,
+        repaired_plan,
+        _clone_frame(final),
+    ]
 
-    while len(selected) < len(titles):
-        selected.insert(-1, _clone_frame(selected[-2]))
-    for index, frame in enumerate(selected[: len(titles)]):
+    for index, frame in enumerate(selected):
         frame["panel_title"] = titles[index]
-    return selected[: len(titles)]
+    return selected
 
 
 def _sample_static_gif_frames(trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -862,10 +1189,22 @@ def _sample_lpa_gif_frames(map_data: dict[str, Any], algorithm_result: dict[str,
     initial_frame["duration_ms"] = DYNAMIC_EVENT_FRAME_MS
     frames.append(initial_frame)
 
-    for index, _update in enumerate(updates):
+    plan_frame = initial
+    previous_step = 0
+    for index, update in enumerate(updates):
+        update_step = int(update.get("step", 0))
+        segment_steps = max(0, update_step - previous_step)
+        for offset in _movement_offsets(plan_frame.get("path", []), segment_steps, max_samples=5):
+            move_frame = _clone_frame(plan_frame)
+            move_frame["event"] = "move"
+            move_frame["current_cell"] = move_frame["path"][offset]
+            move_frame["path"] = move_frame["path"][offset:]
+            move_frame["duration_ms"] = DYNAMIC_MOVE_FRAME_MS
+            frames.append(move_frame)
+
         if index < len(before_updates):
             before_frame = _clone_frame(before_updates[index])
-            before_frame["duration_ms"] = DYNAMIC_GIF_FRAME_MS
+            before_frame["duration_ms"] = DYNAMIC_EVENT_FRAME_MS
             frames.append(before_frame)
         if index < len(dynamic_updates):
             update_frame = _clone_frame(dynamic_updates[index])
@@ -875,6 +1214,18 @@ def _sample_lpa_gif_frames(map_data: dict[str, Any], algorithm_result: dict[str,
             replan_frame = _clone_frame(replans[index])
             replan_frame["duration_ms"] = DYNAMIC_EVENT_FRAME_MS
             frames.append(replan_frame)
+            plan_frame = replans[index]
+        previous_step = update_step
+
+    tail_path = plan_frame.get("path", [])
+    if tail_path:
+        for offset in _movement_offsets(tail_path, len(tail_path) - 1, max_samples=6):
+            move_frame = _clone_frame(plan_frame)
+            move_frame["event"] = "move"
+            move_frame["current_cell"] = tail_path[offset]
+            move_frame["path"] = tail_path[offset:]
+            move_frame["duration_ms"] = DYNAMIC_MOVE_FRAME_MS
+            frames.append(move_frame)
 
     final_frame = _clone_frame(final)
     final_frame["duration_ms"] = DYNAMIC_EVENT_FRAME_MS
@@ -885,9 +1236,103 @@ def _sample_lpa_gif_frames(map_data: dict[str, Any], algorithm_result: dict[str,
     return frames
 
 
+def _sample_lpa_story_gif_frames(map_data: dict[str, Any], algorithm_result: dict[str, Any]) -> list[dict[str, Any]]:
+    frames = _sample_lpa_gif_frames(map_data, algorithm_result)
+    for frame in frames:
+        event = frame.get("event")
+        if event == "move":
+            frame["duration_ms"] = DYNAMIC_MOVE_FRAME_MS
+        elif event in {"dynamic_update", "replan", "final_result", "initial_plan"}:
+            frame["duration_ms"] = DYNAMIC_EVENT_FRAME_MS
+        else:
+            frame["duration_ms"] = DYNAMIC_GIF_FRAME_MS
+    return frames
+
+
+def _draw_story_side_panel(canvas: RasterCanvas, algorithm_result: dict[str, Any], frame: dict[str, Any], x: int, y: int, width: int, height: int) -> None:
+    canvas.fill_rect(x, y, x + width, y + height, DYNAMIC_PANEL_FILL)
+    canvas.draw_rect_outline(x, y, x + width, y + height, PANEL_BORDER, thickness=2)
+    draw_text(canvas, x + 14, y + 18, "PHASE", DYNAMIC_TEXT_MUTED, scale=GIF_LABEL_SCALE)
+    draw_text(canvas, x + 14, y + 46, _truncate_text(_frame_phase_label(frame), width - 28, GIF_LABEL_SCALE), BLACK, scale=GIF_LABEL_SCALE)
+
+    lines = [
+        f"STEP {_safe_int(frame.get('step', 0))}",
+        f"REP {_safe_int(frame.get('replan_count', 0))}",
+        f"UPD {_safe_int(frame.get('updated_nodes', 0))}",
+        f"AFF {len(frame.get('affected_cells', []))}",
+        f"Q {_safe_int(frame.get('queue_size', 0))}",
+        f"LEN {_safe_int(algorithm_result.get('path_length', 0))}",
+        f"TURN {_safe_int(algorithm_result.get('turn_count', 0))}",
+        f"COST {_safe_float(algorithm_result.get('total_cost', 0.0)):.0f}",
+    ]
+    cursor_y = y + 104
+    for line in lines:
+        draw_text(canvas, x + 14, cursor_y, line, BLACK, scale=GIF_LABEL_SCALE)
+        cursor_y += 32
+
+    note_y = y + height - 118
+    canvas.draw_line(x + 14, note_y, x + width - 14, note_y, PANEL_BORDER, thickness=2)
+    draw_text(canvas, x + 14, note_y + 20, "PALE PATH", DYNAMIC_TEXT_MUTED, scale=GIF_LABEL_SCALE)
+    draw_text(canvas, x + 14, note_y + 48, "INITIAL", DYNAMIC_TEXT_MUTED, scale=GIF_LABEL_SCALE)
+    draw_text(canvas, x + 14, note_y + 78, "BLUE FINAL", PATH_BLUE, scale=GIF_LABEL_SCALE)
+
+
+def _draw_lpa_story_gif_frame(map_data: dict[str, Any], algorithm_result: dict[str, Any], frame: dict[str, Any], bundle: dict[str, Any]) -> RasterCanvas:
+    canvas = RasterCanvas(GIF_WIDTH, GIF_HEIGHT, background=WHITE)
+    draw_header(canvas, algorithm_result, map_data, width=GIF_WIDTH, side_margin=GIF_SIDE_MARGIN, scale=GIF_TITLE_SCALE, suffix="STORY")
+
+    map_left = GIF_SIDE_MARGIN
+    map_top = 116
+    map_width = 650
+    map_height = 690
+    panel_left = map_left + map_width + 28
+    panel_width = GIF_WIDTH - panel_left - GIF_SIDE_MARGIN
+
+    canvas.fill_rect(map_left, map_top, map_left + map_width, map_top + map_height, DYNAMIC_PANEL_FILL)
+    canvas.draw_rect_outline(map_left, map_top, map_left + map_width, map_top + map_height, PANEL_BORDER, thickness=2)
+    layout = _layout_in_bounds(map_data, map_left + 28, map_top + 34, map_width - 56, map_height - 68)
+
+    draw_dynamic_maze(canvas, map_data, layout, gif_mode=True)
+    draw_dynamic_search_layers(canvas, layout, frame, algorithm="LPA*", gif_mode=True)
+    draw_gif_blocked_cells(canvas, layout, frame.get("blocked_cells", bundle.get("blocked_cells", [])))
+    draw_affected_cells(canvas, layout, frame.get("affected_cells", []), GIF_LPA_AFFECTED_FILL, alpha=1.0)
+    draw_path_with_style(canvas, layout, bundle.get("initial_path", []), color=(147, 197, 253), thickness=max(3, layout["cell_size"] // 10), dashed=True)
+    draw_path_with_style(canvas, layout, frame.get("path", []) or bundle.get("final_path", []), color=PATH_BLUE, thickness=max(4, layout["cell_size"] // 7))
+    draw_start_goal(canvas, map_data, layout)
+    draw_current_cell(canvas, layout, frame.get("current_cell"))
+
+    _draw_story_side_panel(canvas, algorithm_result, frame, panel_left, map_top, panel_width, map_height)
+    _draw_lpa_story_legend(canvas, GIF_SIDE_MARGIN, GIF_HEIGHT - 78, compact=True)
+    return canvas
+
+
+def render_lpa_story_gif(map_data: dict[str, Any], algorithm_result: dict[str, Any], output_path: str | Path) -> dict[str, Any]:
+    frames = _sample_lpa_story_gif_frames(map_data, algorithm_result)
+    bundle = _lpa_story_bundle(algorithm_result)
+    gif_frames = [
+        {
+            "canvas": _draw_lpa_story_gif_frame(map_data, algorithm_result, frame, bundle),
+            "duration_ms": int(frame.get("duration_ms", DYNAMIC_GIF_FRAME_MS)),
+        }
+        for frame in frames
+    ]
+    export_gif(gif_frames, output_path)
+    return {
+        "status": "ok",
+        "artifact_type": "image/gif",
+        "gif_output_path": str(output_path),
+        "gif_frame_count": len(gif_frames),
+        "frame_duration_ms": DYNAMIC_GIF_FRAME_MS,
+        "width_px": GIF_WIDTH,
+        "height_px": GIF_HEIGHT,
+        "visualization_type": "lpa_story_gif",
+    }
+
+
 def render_process_grid(
     canvas: RasterCanvas,
     map_data: dict[str, Any],
+    algorithm_result: dict[str, Any],
     frames: list[dict[str, Any]],
     *,
     static_mode: bool,
@@ -895,30 +1340,43 @@ def render_process_grid(
 ) -> None:
     for index, frame in enumerate(frames):
         bounds = _process_panel_bounds(index)
+        if not static_mode:
+            canvas.fill_rect(
+                bounds["left"],
+                bounds["top"],
+                bounds["left"] + bounds["width"],
+                bounds["top"] + bounds["height"],
+                DYNAMIC_PANEL_FILL,
+            )
         canvas.draw_rect_outline(bounds["left"], bounds["top"], bounds["left"] + bounds["width"], bounds["top"] + bounds["height"], PANEL_BORDER, thickness=2)
         draw_panel_title(canvas, bounds, frame.get("panel_title", f"STEP {index + 1}"))
 
         inner_left = bounds["left"] + PANEL_INSET
         inner_top = bounds["top"] + PANEL_TITLE_HEIGHT
         inner_width = bounds["width"] - 2 * PANEL_INSET
-        inner_height = bounds["height"] - PANEL_TITLE_HEIGHT - PANEL_INSET
+        metric_strip_height = 50 if not static_mode else 0
+        inner_height = bounds["height"] - PANEL_TITLE_HEIGHT - PANEL_INSET - metric_strip_height
         layout = _layout_in_bounds(map_data, inner_left, inner_top, inner_width, inner_height)
 
-        draw_static_maze(canvas, map_data, layout)
         if static_mode:
+            draw_static_maze(canvas, map_data, layout)
             draw_explored_nodes(canvas, layout, frame.get("explored_cells", []))
             draw_frontier_cells(canvas, layout, frame.get("frontier_cells", []))
             if index == len(frames) - 1:
                 draw_path(canvas, layout, frame.get("path", []))
         else:
+            draw_dynamic_maze(canvas, map_data, layout)
+            draw_dynamic_search_layers(canvas, layout, frame, algorithm=algorithm, gif_mode=False)
             draw_blocked_cells(canvas, layout, frame.get("blocked_cells", []))
             if algorithm == "LPA*":
-                draw_affected_cells(canvas, layout, frame.get("affected_cells", []), LPA_AFFECTED_CYAN, alpha=0.48)
+                draw_affected_cells(canvas, layout, frame.get("affected_cells", []), LPA_AFFECTED_CYAN, alpha=0.42)
             elif algorithm == "D* Lite":
-                draw_affected_cells(canvas, layout, frame.get("affected_cells", []), DSTAR_AFFECTED_VIOLET, alpha=0.48)
+                draw_affected_cells(canvas, layout, frame.get("affected_cells", []), DSTAR_AFFECTED_VIOLET, alpha=0.38)
             draw_path(canvas, layout, frame.get("path", []))
         draw_start_goal(canvas, map_data, layout)
         draw_current_cell(canvas, layout, frame.get("current_cell"))
+        if not static_mode:
+            draw_panel_metric_strip(canvas, bounds, frame, algorithm_result, algorithm)
 
 
 def _draw_gif_frame(map_data: dict[str, Any], algorithm_result: dict[str, Any], frame: dict[str, Any], *, static_mode: bool) -> RasterCanvas:
@@ -926,7 +1384,7 @@ def _draw_gif_frame(map_data: dict[str, Any], algorithm_result: dict[str, Any], 
     algorithm = str(algorithm_result.get("algorithm", ""))
     draw_header(canvas, algorithm_result, map_data, width=GIF_WIDTH, side_margin=GIF_SIDE_MARGIN, scale=GIF_TITLE_SCALE, suffix="GIF")
 
-    event_label = f"{frame.get('event', '').replace('_', ' ')} STEP {frame.get('step', 0)}".strip().upper()
+    event_label = f"{_frame_phase_label(frame)} STEP {frame.get('step', 0)}".strip().upper()
     event_label = _truncate_text(event_label, GIF_WIDTH - 2 * GIF_SIDE_MARGIN - 240, GIF_LABEL_SCALE)
     draw_text(canvas, GIF_SIDE_MARGIN, 62, event_label, BLACK, scale=GIF_LABEL_SCALE)
 
@@ -937,8 +1395,8 @@ def _draw_gif_frame(map_data: dict[str, Any], algorithm_result: dict[str, Any], 
         GIF_WIDTH - 2 * GIF_SIDE_MARGIN,
         GIF_HEIGHT - GIF_TOP_MARGIN - GIF_BOTTOM_MARGIN,
     )
-    draw_static_maze(canvas, map_data, layout)
     if static_mode:
+        draw_static_maze(canvas, map_data, layout)
         draw_gif_explored_nodes(canvas, layout, frame.get("explored_cells", []))
         draw_gif_frontier_cells(canvas, layout, frame.get("frontier_cells", []))
         if frame.get("path"):
@@ -949,28 +1407,15 @@ def _draw_gif_frame(map_data: dict[str, Any], algorithm_result: dict[str, Any], 
             f"FRONT {len(frame.get('frontier_cells', []))}",
         ]
     else:
+        draw_dynamic_maze(canvas, map_data, layout, gif_mode=True)
+        draw_dynamic_search_layers(canvas, layout, frame, algorithm=algorithm, gif_mode=True)
         draw_gif_blocked_cells(canvas, layout, frame.get("blocked_cells", []))
         if algorithm == "LPA*":
             draw_affected_cells(canvas, layout, frame.get("affected_cells", []), GIF_LPA_AFFECTED_FILL, alpha=1.0)
         elif algorithm == "D* Lite":
             draw_affected_cells(canvas, layout, frame.get("affected_cells", []), GIF_DSTAR_AFFECTED_FILL, alpha=1.0)
         draw_path(canvas, layout, frame.get("path", []))
-        if algorithm == "LPA*":
-            metric_lines = [
-                f"STEP {int(frame.get('step', 0))}",
-                f"UPDATED {int(frame.get('updated_nodes', 0))}",
-                f"QUEUE {int(frame.get('queue_size', 0))}",
-                f"REPLAN {int(frame.get('replan_count', 0))}",
-            ]
-        else:
-            current_cell = frame.get("current_cell")
-            pos_text = "--,--" if current_cell is None else f"{int(current_cell[0])},{int(current_cell[1])}"
-            metric_lines = [
-                f"STEP {int(frame.get('step', 0))}",
-                f"UPDATED {int(frame.get('updated_nodes', 0))}",
-                f"POS {pos_text}",
-                f"REPLAN {int(frame.get('replan_count', 0))}",
-            ]
+        metric_lines = _gif_metric_lines(frame, algorithm_result, algorithm)
     draw_start_goal(canvas, map_data, layout)
     draw_current_cell(canvas, layout, frame.get("current_cell"))
     draw_metric_box(canvas, metric_lines, width=GIF_WIDTH)
@@ -997,9 +1442,7 @@ def render_process_png(map_data: dict[str, Any], algorithm_result: dict[str, Any
         visualization_type = "static_process_grid"
         static_mode = True
     elif algorithm == "LPA*":
-        frames = select_lpa_process_frames(trace, panel_count=PANEL_COUNT)
-        visualization_type = "dynamic_process_grid"
-        static_mode = False
+        return render_lpa_story_png(map_data, algorithm_result, output_path)
     elif algorithm == "D* Lite":
         frames = select_dynamic_process_frames(trace, panel_count=PANEL_COUNT)
         visualization_type = "dynamic_process_grid"
@@ -1009,7 +1452,7 @@ def render_process_png(map_data: dict[str, Any], algorithm_result: dict[str, Any
 
     canvas = RasterCanvas(PNG_WIDTH, PNG_HEIGHT, background=WHITE)
     draw_header(canvas, algorithm_result, map_data, width=PNG_WIDTH, side_margin=SIDE_MARGIN, scale=TITLE_SCALE, suffix="PROCESS")
-    render_process_grid(canvas, map_data, frames, static_mode=static_mode, algorithm=algorithm)
+    render_process_grid(canvas, map_data, algorithm_result, frames, static_mode=static_mode, algorithm=algorithm)
     draw_process_legend(
         canvas,
         visualization_type,
@@ -1044,10 +1487,7 @@ def render_process_gif(map_data: dict[str, Any], algorithm_result: dict[str, Any
         static_mode = True
         frame_duration_ms = STATIC_GIF_FRAME_MS
     elif algorithm == "LPA*":
-        frames = _sample_lpa_gif_frames(map_data, algorithm_result)
-        visualization_type = "dynamic_process_gif"
-        static_mode = False
-        frame_duration_ms = DYNAMIC_GIF_FRAME_MS
+        return render_lpa_story_gif(map_data, algorithm_result, output_path)
     elif algorithm == "D* Lite":
         frames = _sample_dynamic_gif_frames(map_data, algorithm_result)
         visualization_type = "dynamic_process_gif"
