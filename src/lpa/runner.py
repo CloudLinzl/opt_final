@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Lifelong Planning A* implementation.
 
-The public entry point intentionally matches the placeholder signature so that
-``src.algorithm_registry`` can keep loading ``src.lpa.run_lpa`` unchanged.
+The public entry point follows the shared registry signature so that
+``src.algorithm_registry`` can load ``src.lpa.run_lpa`` directly.
 """
 
 from __future__ import annotations

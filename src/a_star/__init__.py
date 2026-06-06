@@ -1,4 +1,4 @@
-"""A* algorithm placeholder package."""
+"""A* algorithm package."""
 
 from src.a_star.runner import run_a_star
 

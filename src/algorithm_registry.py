@@ -16,6 +16,7 @@ from typing import Any, Callable
 UNIFIED_RESULT_KEYS = [
     "maze_id",
     "algorithm",
+    "status",
     "success",
     "path",
     "path_length",
@@ -29,6 +30,10 @@ UNIFIED_RESULT_KEYS = [
     "replan_time_ms",
     "updated_nodes",
     "replanned_path_length",
+    "explored_cells",
+    "visualization_trace",
+    "heuristic_weight",
+    "cost_weights",
 ]
 
 
@@ -59,6 +64,10 @@ def _placeholder_result(maze_id: str, algorithm: str, status: str) -> dict[str, 
         "replan_time_ms": 0.0,
         "updated_nodes": 0,
         "replanned_path_length": -1,
+        "explored_cells": [],
+        "visualization_trace": [],
+        "heuristic_weight": None,
+        "cost_weights": None,
     }
     return result
 
@@ -68,6 +77,13 @@ def default_registry() -> list[AlgorithmRegistration]:
         AlgorithmRegistration("bfs", "BFS", "src.bfs", "run_bfs", dynamic=False),
         AlgorithmRegistration("dfs", "DFS", "src.dfs", "run_dfs", dynamic=False),
         AlgorithmRegistration("a_star", "A*", "src.a_star", "run_a_star", dynamic=False),
+        AlgorithmRegistration(
+            "cost_aware_a_star",
+            "Cost-aware A*",
+            "src.weighted_a_star",
+            "run_cost_aware_a_star",
+            dynamic=False,
+        ),
         AlgorithmRegistration(
             "weighted_a_star",
             "Weighted A*",

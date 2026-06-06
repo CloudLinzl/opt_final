@@ -1,4 +1,4 @@
-"""Weighted A* implementation for maze pathfinding with direction-state expansion."""
+"""Directional A* variants for multi-cost maze pathfinding."""
 
 from __future__ import annotations
 
@@ -11,7 +11,10 @@ from scripts.load_map import get_neighbors, is_goal, load_map
 
 
 def _reconstruct_path(
-    parent: dict[tuple[int, int, int | None, int | None], tuple[int, int, int | None, int | None] | None],
+    parent: dict[
+        tuple[int, int, int | None, int | None],
+        tuple[int, int, int | None, int | None] | None,
+    ],
     state: tuple[int, int, int | None, int | None],
 ) -> list[list[int]]:
     path: list[list[int]] = []
@@ -22,22 +25,29 @@ def _reconstruct_path(
     return path
 
 
-def run_weighted_a_star(
+def _load_cost_weights(kwargs: dict[str, Any]) -> tuple[float, float, float, float]:
+    cost_weights = kwargs.get("cost_weights", {})
+    p1 = float(kwargs.get("p1", cost_weights.get("p1", 1.0)))
+    p2 = float(kwargs.get("p2", cost_weights.get("p2", 1.0)))
+    p3 = float(kwargs.get("p3", cost_weights.get("p3", 3.0)))
+    p4 = float(kwargs.get("p4", cost_weights.get("p4", 2.0)))
+    return p1, p2, p3, p4
+
+
+def _run_directional_a_star(
     map_input: str | Path | dict[str, Any],
-    **kwargs: Any,
+    *,
+    algorithm_name: str,
+    heuristic_weight: float,
+    p1: float,
+    p2: float,
+    p3: float,
+    p4: float,
 ) -> dict[str, Any]:
-    del kwargs
     map_data = load_map(map_input) if isinstance(map_input, (str, Path)) else map_input
 
     start = map_data["start"]
     goals = map_data.get("goal_cells", [map_data["goal"]])
-
-    # Load penalty config
-    p1 = 1.0  # Path length weight
-    p2 = 1.0  # Turn penalty weight
-    p3 = 3.0  # Risk cell penalty weight
-    p4 = 2.0  # Narrow cell penalty weight
-
     risk_cells = {tuple(cell) for cell in map_data.get("risk_cells", [])}
     narrow_cells = {tuple(cell) for cell in map_data.get("narrow_cells", [])}
 
@@ -46,17 +56,16 @@ def run_weighted_a_star(
 
     start_time = time.perf_counter()
 
-    # State: (x, y, dx, dy)
     start_state = (start[0], start[1], None, None)
-
-    # Costs
     g_score = {start_state: 0.0}
-    parent: dict[tuple[int, int, int | None, int | None], tuple[int, int, int | None, int | None] | None] = {start_state: None}
+    parent: dict[
+        tuple[int, int, int | None, int | None],
+        tuple[int, int, int | None, int | None] | None,
+    ] = {start_state: None}
 
-    # Priority Queue: (f_score, insertion_order, state)
     open_set: list[tuple[float, int, tuple[int, int, int | None, int | None]]] = []
     order = 0
-    heapq.heappush(open_set, (heuristic(start[0], start[1]), order, start_state))
+    heapq.heappush(open_set, (heuristic_weight * heuristic(start[0], start[1]), order, start_state))
     order += 1
 
     closed_set: set[tuple[int, int, int | None, int | None]] = set()
@@ -67,7 +76,7 @@ def run_weighted_a_star(
     step = 0
 
     while open_set:
-        f, _, state = heapq.heappop(open_set)
+        _, _, state = heapq.heappop(open_set)
         x, y, dx, dy = state
 
         if state in closed_set:
@@ -89,19 +98,15 @@ def run_weighted_a_star(
             if neighbor in closed_set:
                 continue
 
-            # Calculate edge cost
             step_cost = p1
             turn_cost = 0.0
 
-            # Turn penalty
-            if dx is not None and dy is not None:
-                if (dx, dy) != (ndx, ndy):
-                    if dx * ndx + dy * ndy == -1:  # 180 degree turn
-                        turn_cost = 2.0 * p2
-                    else:  # 90 degree turn
-                        turn_cost = 1.0 * p2
+            if dx is not None and dy is not None and (dx, dy) != (ndx, ndy):
+                if dx * ndx + dy * ndy == -1:
+                    turn_cost = 2.0 * p2
+                else:
+                    turn_cost = 1.0 * p2
 
-            # Risk and narrow penalties
             risk_cost = p3 if (nx, ny) in risk_cells else 0.0
             narrow_cost = p4 if (nx, ny) in narrow_cells else 0.0
 
@@ -111,7 +116,7 @@ def run_weighted_a_star(
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 parent[neighbor] = state
                 g_score[neighbor] = tentative_g
-                f_score = tentative_g + heuristic(nx, ny)
+                f_score = tentative_g + heuristic_weight * heuristic(nx, ny)
                 heapq.heappush(open_set, (f_score, order, neighbor))
                 order += 1
 
@@ -151,10 +156,10 @@ def run_weighted_a_star(
 
     if success and len(path) > 1:
         for node in path[1:]:
-            t_node = tuple(node)
-            if t_node in risk_cells:
+            tuple_node = tuple(node)
+            if tuple_node in risk_cells:
                 total_risk_cost += 1
-            if t_node in narrow_cells:
+            if tuple_node in narrow_cells:
                 total_narrow_cost += 1
 
         if len(path) > 2:
@@ -186,15 +191,15 @@ def run_weighted_a_star(
     total_cost = -1.0
     if success:
         total_cost = (
-            p1 * path_length +
-            p2 * turn_count +
-            p3 * total_risk_cost +
-            p4 * total_narrow_cost
+            p1 * path_length
+            + p2 * turn_count
+            + p3 * total_risk_cost
+            + p4 * total_narrow_cost
         )
 
     return {
         "maze_id": map_data["maze_id"],
-        "algorithm": "Weighted A*",
+        "algorithm": algorithm_name,
         "status": "ok",
         "success": success,
         "path": path,
@@ -211,4 +216,42 @@ def run_weighted_a_star(
         "updated_nodes": 0,
         "replanned_path_length": -1,
         "visualization_trace": visualization_trace,
+        "heuristic_weight": heuristic_weight,
+        "cost_weights": {"p1": p1, "p2": p2, "p3": p3, "p4": p4},
     }
+
+
+def run_cost_aware_a_star(
+    map_input: str | Path | dict[str, Any],
+    **kwargs: Any,
+) -> dict[str, Any]:
+    p1, p2, p3, p4 = _load_cost_weights(kwargs)
+    return _run_directional_a_star(
+        map_input,
+        algorithm_name="Cost-aware A*",
+        heuristic_weight=1.0,
+        p1=p1,
+        p2=p2,
+        p3=p3,
+        p4=p4,
+    )
+
+
+def run_weighted_a_star(
+    map_input: str | Path | dict[str, Any],
+    **kwargs: Any,
+) -> dict[str, Any]:
+    p1, p2, p3, p4 = _load_cost_weights(kwargs)
+    cost_weights = kwargs.get("cost_weights", {})
+    heuristic_weight = float(
+        kwargs.get("heuristic_weight", kwargs.get("w", cost_weights.get("heuristic_weight", 1.5)))
+    )
+    return _run_directional_a_star(
+        map_input,
+        algorithm_name="Weighted A*",
+        heuristic_weight=heuristic_weight,
+        p1=p1,
+        p2=p2,
+        p3=p3,
+        p4=p4,
+    )

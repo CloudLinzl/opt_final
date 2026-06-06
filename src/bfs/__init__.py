@@ -1,4 +1,4 @@
-"""BFS algorithm placeholder package."""
+"""BFS algorithm package."""
 
 from src.bfs.runner import run_bfs
 

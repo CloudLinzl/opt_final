@@ -1,4 +1,4 @@
-"""LPA* algorithm placeholder package."""
+"""LPA* algorithm package."""
 
 from src.lpa.runner import run_lpa
 

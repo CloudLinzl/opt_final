@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Project main entry for orchestrating map loading, dynamic generation,
-algorithm execution, result saving, and visualization placeholders.
+algorithm execution, result saving, and visualization.
 """
 
 from __future__ import annotations
@@ -27,6 +27,14 @@ from src.dynamic_map_builder import DEFAULT_DYNAMIC_CONFIG, create_dynamic_map_v
 from src.visualization import visualize_result, write_visualization_manifest  # noqa: E402
 
 
+def _parse_algorithm_selection(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    items = [item.strip() for item in raw.split(",")]
+    selected = [item for item in items if item]
+    return selected or None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the project pipeline on one static map.")
     parser.add_argument(
@@ -38,11 +46,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "outputs" / "default-run",
+        default=PROJECT_ROOT / "outputs" / "default_run",
         help="Directory for one pipeline run",
     )
     parser.add_argument("--variant-index", type=int, default=1, help="Dynamic variant index")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for dynamic map generation")
+    parser.add_argument(
+        "--algorithms",
+        type=str,
+        default="",
+        help="Comma-separated algorithm keys to run, e.g. bfs,a_star,weighted_a_star",
+    )
     parser.add_argument(
         "--visualize-mode",
         choices=["text", "image"],
@@ -68,6 +82,7 @@ def run_pipeline(
     output_dir: str | Path,
     variant_index: int = 1,
     seed: int = 42,
+    algorithms: list[str] | None = None,
     visualize_mode: str = "text",
     skip_visualization: bool = False,
     dynamic_config: dict[str, Any] | None = None,
@@ -96,6 +111,15 @@ def run_pipeline(
     visualization_artifacts: dict[str, dict[str, Any]] = {}
 
     registry = default_registry()
+    if algorithms:
+        selected_keys = set(algorithms)
+        registry = [registration for registration in registry if registration.key in selected_keys]
+        unknown = sorted(selected_keys - {registration.key for registration in default_registry()})
+        if unknown:
+            raise ValueError(f"unknown algorithm keys: {', '.join(unknown)}")
+        if not registry:
+            raise ValueError("no algorithms selected")
+
     for registration in registry:
         if registration.dynamic:
             map_input = static_map_data
@@ -151,6 +175,7 @@ def run_pipeline(
             "timestamp": timestamp,
             "seed": seed,
             "variant_index": variant_index,
+            "algorithms": [registration.key for registration in registry],
             "visualize_mode": visualize_mode,
             "skip_visualization": skip_visualization,
         },
@@ -182,6 +207,7 @@ def main() -> None:
         output_dir=args.output_dir,
         variant_index=args.variant_index,
         seed=args.seed,
+        algorithms=_parse_algorithm_selection(args.algorithms),
         visualize_mode=args.visualize_mode,
         skip_visualization=args.skip_visualization,
         dynamic_config=dynamic_config,

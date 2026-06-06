@@ -2,14 +2,15 @@
 
 本项目围绕迷宫竞赛机器人的路径规划问题展开，目标是在统一地图、统一接口和统一评判标准下，对多种静态与动态路径规划算法进行比较分析。
 
-当前已接入或预留的算法主线为：
+当前已接入的算法主线为：
 
 1. `BFS`：静态无权最短路基准
 2. `DFS`：静态深度优先搜索，对比 `BFS`
 3. `A*`：启发式搜索效率优化
-4. `Weighted A*`：预留
-5. `LPA*`：动态环境增量重规划
-6. `D* Lite`：在线动态路径规划
+4. `Cost-aware A*`：方向状态扩展的综合代价优化
+5. `Weighted A*`：带启发函数加权的 A*
+6. `LPA*`：动态环境增量重规划
+7. `D* Lite`：在线动态路径规划
 
 ## 目录结构
 
@@ -57,7 +58,7 @@ opt_final/
 1. 计划书与接口规范整理
 2. Micromouse 地图下载与 JSON 转换
 3. 统一地图读取脚本
-4. `BFS`、`DFS`、`A*`、`Weighted A*`、`LPA*`、`D* Lite` 可运行版本
+4. `BFS`、`DFS`、`A*`、`Cost-aware A*`、`Weighted A*`、`LPA*`、`D* Lite` 可运行版本
 5. 主流程 `main.py`、算法注册器、动态图构造器
 6. `PNG + GIF` 双产物可视化
 
@@ -71,6 +72,9 @@ opt_final/
    - `outputs/<run_name>/dynamic_maps/` 保存主流程生成的动态图
 3. 可视化单独汇总到：
    - `outputs/visualizations/<run_name>/`
+4. 可通过 `--algorithms` 只运行指定算法，例如：
+   - `bfs,a_star`
+   - `cost_aware_a_star,weighted_a_star`
 
 默认运行目录现在是：
 
@@ -82,6 +86,12 @@ outputs/default_run
 
 ```bash
 python3 'src/main.py' --output-dir 'outputs/demo_run' --visualize-mode image
+```
+
+按需只跑部分算法：
+
+```bash
+python3 'src/main.py' --output-dir 'outputs/demo_run' --algorithms 'bfs,a_star,weighted_a_star'
 ```
 
 ## 可视化输出
@@ -99,13 +109,14 @@ python3 'src/main.py' --output-dir 'outputs/demo_run' --visualize-mode image
 4. `dfs_process.gif`
 5. `a_star_process.png`
 6. `a_star_process.gif`
-7. `lpa_process.png`
-8. `lpa_process.gif`
-9. `dstar_lite_process.png`
-10. `dstar_lite_process.gif`
-
-11. `weighted_a_star_process.png`
-12. `weighted_a_star_process.gif`
+7. `cost_aware_a_star_process.png`
+8. `cost_aware_a_star_process.gif`
+9. `weighted_a_star_process.png`
+10. `weighted_a_star_process.gif`
+11. `lpa_process.png`
+12. `lpa_process.gif`
+13. `dstar_lite_process.png`
+14. `dstar_lite_process.gif`
 
 ## 常用命令
 
@@ -125,28 +136,4 @@ python3 'scripts/load_map.py'
 
 ```bash
 python3 'src/main.py' --output-dir 'outputs/demo_run' --visualize-mode image
-```
-
-### 4. 单独调用 `D* Lite`
-
-```python
-from pathlib import Path
-from src.dlite import run_dstar_lite
-
-result = run_dstar_lite(
-    Path("maps/dynamic_json/apec2024_dynamic_1.json")
-)
-print(result["success"], result["path_length"])
-```
-
-### 5. 单独调用 `DFS`
-
-```python
-from pathlib import Path
-from src.dfs import run_dfs
-
-result = run_dfs(
-    Path("maps/json/alljapan-045-2024-exp-fin.json")
-)
-print(result["success"], result["path_length"])
 ```
