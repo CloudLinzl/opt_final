@@ -36,6 +36,15 @@ def _normalize_state(cell: list[int] | tuple[int, int]) -> tuple[int, int]:
     return (int(cell[0]), int(cell[1]))
 
 
+def _cell_list(cell: tuple[int, int]) -> list[int]:
+    return [cell[0], cell[1]]
+
+
+def _unique_cells(cells: list[list[int]]) -> list[list[int]]:
+    normalized = {(int(cell[0]), int(cell[1])) for cell in cells}
+    return [[x, y] for x, y in sorted(normalized, key=lambda item: (item[1], item[0]))]
+
+
 def compute_turn_count(path: list[list[int]]) -> int:
     if len(path) < 3:
         return 0
@@ -117,6 +126,8 @@ def _trace_frame(
     replan_count: int = 0,
     updated_nodes: int = 0,
     affected_cells: list[list[int]] | None = None,
+    explored_cells: list[list[int]] | None = None,
+    frontier_cells: list[list[int]] | None = None,
     queue_size: int = 0,
 ) -> dict[str, Any]:
     return {
@@ -124,8 +135,8 @@ def _trace_frame(
         "event": event,
         "current_cell": list(current_cell) if current_cell is not None else None,
         "path": [list(cell) for cell in (path or [])],
-        "explored_cells": [],
-        "frontier_cells": [],
+        "explored_cells": [list(cell) for cell in (explored_cells or [])],
+        "frontier_cells": [list(cell) for cell in (frontier_cells or [])],
         "blocked_cells": [[x, y] for x, y in sorted(blocked_cells)],
         "replan_count": replan_count,
         "updated_nodes": updated_nodes,
@@ -233,6 +244,7 @@ class DStarLite:
         self.km = 0.0
         self.blocked_cells: set[tuple[int, int]] = set()
         self.expanded_nodes = 0
+        self.expanded_cells: list[list[int]] = []
         self.debug = debug
         self.debug_log: list[dict[str, Any]] = []
 
@@ -336,6 +348,9 @@ class DStarLite:
             heapq.heappop(self.open_heap)
         return (INF, INF)
 
+    def frontier_cells(self) -> list[list[int]]:
+        return _unique_cells([_cell_list(state) for state in self.open_keys])
+
     def update_vertex(self, state: tuple[int, int]) -> None:
         if state not in self.goals:
             succ = self.successors(state)
@@ -356,13 +371,17 @@ class DStarLite:
                 rhs=self.rhs[state],
             )
 
-    def compute_shortest_path(self) -> None:
+    def compute_shortest_path(self) -> list[list[int]]:
+        expanded_this_call: list[list[int]] = []
         while self._top_key() < self.calculate_key(self.current_start) or self.rhs[self.current_start] != self.g[self.current_start]:
             state, old_key = self._pop_valid_open()
             if state is None:
                 break
 
             self.expanded_nodes += 1
+            expanded_cell = _cell_list(state)
+            self.expanded_cells.append(expanded_cell)
+            expanded_this_call.append(expanded_cell)
             new_key = self.calculate_key(state)
             self._log(
                 "expand",
@@ -383,6 +402,7 @@ class DStarLite:
                 self.update_vertex(state)
                 for pred in self.predecessors(state):
                     self.update_vertex(pred)
+        return _unique_cells(expanded_this_call)
 
     def extract_planned_path(self) -> list[list[int]]:
         if self.g[self.current_start] == INF:
@@ -472,7 +492,7 @@ def run_dstar_lite(
 
     planner = DStarLite(map_data, debug=debug)
     runtime_start = time.perf_counter()
-    planner.compute_shortest_path()
+    initial_expanded = planner.compute_shortest_path()
     initial_plan = planner.extract_planned_path()
     visualization_trace = [
         _trace_frame(
@@ -483,6 +503,8 @@ def run_dstar_lite(
             blocked_cells=planner.blocked_cells,
             replan_count=0,
             updated_nodes=0,
+            explored_cells=initial_expanded,
+            frontier_cells=planner.frontier_cells(),
             queue_size=len(planner.open_keys),
         )
     ]
@@ -537,6 +559,8 @@ def run_dstar_lite(
                     blocked_cells=planner.blocked_cells,
                     replan_count=replan_count,
                     updated_nodes=updated_nodes,
+                    explored_cells=[],
+                    frontier_cells=planner.frontier_cells(),
                     queue_size=len(planner.open_keys),
                 )
             )
@@ -554,10 +578,12 @@ def run_dstar_lite(
                         replan_count=replan_count,
                         updated_nodes=updated_nodes,
                         affected_cells=affected_cells,
+                        explored_cells=[],
+                        frontier_cells=planner.frontier_cells(),
                         queue_size=len(planner.open_keys),
                     )
                 )
-                planner.compute_shortest_path()
+                replan_expanded = planner.compute_shortest_path()
                 replan_times.append((time.perf_counter() - replan_start) * 1000.0)
                 replan_count += 1
 
@@ -579,6 +605,8 @@ def run_dstar_lite(
                         replan_count=replan_count,
                         updated_nodes=updated_nodes,
                         affected_cells=affected_cells,
+                        explored_cells=replan_expanded,
+                        frontier_cells=planner.frontier_cells(),
                         queue_size=len(planner.open_keys),
                     )
                 )
@@ -611,6 +639,8 @@ def run_dstar_lite(
             blocked_cells=planner.blocked_cells,
             replan_count=replan_count,
             updated_nodes=updated_nodes,
+            explored_cells=_unique_cells(planner.expanded_cells),
+            frontier_cells=planner.frontier_cells(),
             queue_size=len(planner.open_keys),
         )
     )

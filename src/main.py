@@ -7,6 +7,7 @@ algorithm execution, result saving, and visualization.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 from datetime import datetime
 import sys
@@ -76,6 +77,25 @@ def save_json(data: dict[str, Any], output_path: Path) -> None:
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _lpa_showcase_updates(static_map_data: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Use a route-hitting LPA* update for the selected 1994 showcase map."""
+    if static_map_data.get("maze_id") != "alljapan-015-1994-exp-fin":
+        return None
+    return [{"step": 3, "blocked_cells": [[0, 10]], "released_cells": []}]
+
+
+def _with_dynamic_updates(
+    static_map_data: dict[str, Any],
+    updates: list[dict[str, Any]],
+    *,
+    suffix: str,
+) -> dict[str, Any]:
+    dynamic_map = deepcopy(static_map_data)
+    dynamic_map["maze_id"] = f"{static_map_data['maze_id']}_{suffix}"
+    dynamic_map["dynamic_updates"] = updates
+    return dynamic_map
+
+
 def run_pipeline(
     *,
     static_map_file: str | Path,
@@ -109,6 +129,7 @@ def run_pipeline(
 
     algorithm_results: dict[str, dict[str, Any]] = {}
     visualization_artifacts: dict[str, dict[str, Any]] = {}
+    dynamic_updates_by_algorithm: dict[str, list[dict[str, Any]]] = {}
 
     registry = default_registry()
     if algorithms:
@@ -122,14 +143,25 @@ def run_pipeline(
 
     for registration in registry:
         if registration.dynamic:
+            algorithm_dynamic_updates = dynamic_bundle["dynamic_updates"]
+            visualization_map = dynamic_bundle["dynamic_map_data"]
+            if registration.key == "lpa":
+                lpa_updates = _lpa_showcase_updates(static_map_data)
+                if lpa_updates is not None:
+                    algorithm_dynamic_updates = lpa_updates
+                    visualization_map = _with_dynamic_updates(
+                        static_map_data,
+                        algorithm_dynamic_updates,
+                        suffix="lpa_story_dynamic",
+                    )
+            dynamic_updates_by_algorithm[registration.key] = algorithm_dynamic_updates
             map_input = static_map_data
             result = run_registered_algorithm(
                 registration,
                 map_input=map_input,
-                map_data=dynamic_bundle["dynamic_map_data"],
-                dynamic_updates=dynamic_bundle["dynamic_updates"],
+                map_data=visualization_map,
+                dynamic_updates=algorithm_dynamic_updates,
             )
-            visualization_map = dynamic_bundle["dynamic_map_data"]
         else:
             map_input = static_map_data
             result = run_registered_algorithm(
@@ -168,6 +200,7 @@ def run_pipeline(
         "static_map": summarize_map(static_map_data),
         "dynamic_map_file": dynamic_bundle["dynamic_map_file"],
         "dynamic_updates": dynamic_bundle["dynamic_updates"],
+        "dynamic_updates_by_algorithm": dynamic_updates_by_algorithm,
         "dynamic_generation_config": dynamic_bundle["dynamic_generation_config"],
         "algorithm_results": algorithm_results,
         "visualization_artifacts": visualization_artifacts,
